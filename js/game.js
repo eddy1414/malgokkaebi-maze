@@ -527,6 +527,9 @@
     if (!word) return;
     if (!/^[가-힣]+$/.test(word)) { err('한글로 된 단어만 낼 수 있어요.'); return; }
     if (word.length < 2) { err('두 글자 이상이어야 해요.'); return; }
+    for (var k = 0; k < S.cur.length; k++) {        // 팻말에 이미 있는 단어면 그 길로
+      if (S.cur[k].word.word === word) { $('#direct-input').value = ''; $('#direct-err').textContent = ''; pick(k); return; }
+    }
     if (word[0] !== c && !(alt && word[0] === alt)) {
       err('‘' + c + '’' + euro(c) + ' 시작해야 해요.' + ((alt && d.base.has(alt)) ? ' (두음 법칙으로 ‘' + alt + '’도 돼요)' : ''));
       return;
@@ -656,17 +659,18 @@
   }
 
   /** 직접 입력으로 낸 단어 — 팻말에 없던 좁은 샛길이 옆으로 열린다 */
-  function sideWay(fh) {
+  function sideWay(fh0) {
     var m = S.map, edge = sideMargin();
     var outer = m.branches.length ? Math.max.apply(null, m.branches.map(function (b) { return Math.abs(b.x - m.x); })) : 0;
-    var off = Math.min(Math.max(outer + 72, 150), 300);   // 어떤 팻말보다도 바깥쪽으로
+    var off = outer + edge + 24;   // 가장 바깥 팻말(판 절반 너비까지)보다 확실히 더 바깥으로
     m.sideDir = m.sideDir === 1 ? -1 : 1;                 // 쓸 때마다 반대쪽으로
     var dir = m.sideDir;
     if (m.x + dir * off > m.W - edge || m.x + dir * off < edge) dir = -dir;
     m.sideDir = dir;
+    var fh = Math.max(fh0, Math.round(off * 0.62));
     var x = Math.round(m.x + dir * off), y = Math.round(m.y - fh);
     return {
-      x: x, y: y, dir: dir, off: off,
+      x: x, y: y, dir: dir, off: off, h: fh,
       d: 'M' + m.x + ',' + m.y + ' C' + m.x + ',' + Math.round(m.y - fh * 0.5) +
         ' ' + x + ',' + Math.round(y + fh * 0.55) + ' ' + x + ',' + y
     };
@@ -697,7 +701,7 @@
       seg1.floor.classList.add('taken');
       end1 = { x: br.x, y: br.y };
     } else {   // 직접 입력: 팻말에 없던 샛길이 열린다
-      var fh = forkHeight(), way = sideWay(fh);
+      var way = sideWay(forkHeight());
       end1 = { x: way.x, y: way.y };
       seg1 = segment(way.d, 'taken narrow');
       seg1.wall.classList.add('narrow');
