@@ -6,7 +6,7 @@
   var Gob = window.KMGoblin;
   var Snd = window.KMSound;
   var KM = window.KM = window.KM || {};
-  var DATA_VER = '9';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
+  var DATA_VER = '10';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
   var $ = function (s) { return document.querySelector(s); };
   var last = function (w) { return w[w.length - 1]; };
 
@@ -555,7 +555,8 @@
    */
   var SVGNS = 'http://www.w3.org/2000/svg';
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var MAP_H = 9000, FORK_H = 176, CORR_H = 150, SIDE = 78;
+  var MAP_H = 9000, FORK_H = 176, CORR_H = 150;
+  var SIDE = 98;             // 길이 지도 가장자리에서 떨어지는 거리 (팻말 절반 너비 + 여유)
   var CAM_Y = 0.62;          // 캐릭터가 서 있는 화면 높이 비율
   var SPEED = 0.26;          // 걷는 속도 (픽셀/ms) — 길이와 상관없이 일정
 
@@ -569,7 +570,16 @@
     $('#mp-' + layer).appendChild(el);
     return el;
   }
-  function mapWidth() { return Math.max(560, $('#map').clientWidth || 640); }
+  function mapWidth() {
+    var view = $('#map').clientWidth || 640;
+    return Math.max(1600, Math.round(view * 2.5));   // 보이는 폭보다 넓게 잡아 좌우로 움직일 여지를 둔다
+  }
+  /** 팻말 절반 너비 (CSS 가 화면 폭에 따라 정하므로 실제 값을 재서 쓴다) */
+  function sideMargin() {
+    var b = document.querySelector('#options .opt');
+    var w = b ? b.getBoundingClientRect().width : 0;
+    return Math.max(SIDE, Math.round(w / 2) + 14);
+  }
 
   /** 판 시작: 지도를 비우고 입구에 세운다 */
   function mapInit() {
@@ -616,15 +626,16 @@
   function mapFork(opts) {
     var m = S.map, n = opts.length;
     // 화면에 보이는 폭 안에서만 길을 벌린다 (지도는 보는 사람을 따라 움직인다)
-    var visW = Math.min(m.W, $('#map').clientWidth || m.W);
-    var half = Math.max(110, visW / 2 - SIDE);
+    var visW = $('#map').clientWidth || m.W;
+    var side = sideMargin();
+    var half = Math.max(110, visW / 2 - side);
     var step = Math.min(215, (half * 2) / Math.max(1, n - 1));
     var xs = [], i;
     for (i = 0; i < n; i++) xs.push(n === 1 ? m.x : m.x + (i - (n - 1) / 2) * step);
     var lo = Math.min.apply(null, xs), hi = Math.max.apply(null, xs), shift = 0;
-    if (lo < SIDE) shift = SIDE - lo;
-    else if (hi > m.W - SIDE) shift = (m.W - SIDE) - hi;
-    xs = xs.map(function (x) { return Math.round(Math.max(SIDE, Math.min(m.W - SIDE, x + shift))); });
+    if (lo < side) shift = side - lo;
+    else if (hi > m.W - side) shift = (m.W - side) - hi;
+    xs = xs.map(function (x) { return Math.round(Math.max(side, Math.min(m.W - side, x + shift))); });
     var fh = forkHeight();
     m.branches = opts.map(function (o, k) {
       var x = xs[k], y = Math.round(m.y - fh - (k % 2 ? 24 : 0));
