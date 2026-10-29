@@ -4,6 +4,7 @@
 
   var E = window.KMEngine;
   var Gob = window.KMGoblin;
+  var Snd = window.KMSound;
   var KM = window.KM = window.KM || {};
   var $ = function (s) { return document.querySelector(s); };
   var last = function (w) { return w[w.length - 1]; };
@@ -303,6 +304,7 @@
       coachIdx: 0, timer: null, token: {}, history: []
     };
     show('game');
+    Snd.bgmStart();
     $('#game-title').textContent = opts.title;
     $('#game-dict').textContent = d.meta.name;
     Gob.set($('#game-goblin'), 'idle');
@@ -426,6 +428,7 @@
     resetDirect();
     placeOptions();
     followMap();
+    if (S.chain.length > 1) Snd.fork();
     var first = $('#options .opt');
     if (first && document.activeElement && document.activeElement.classList.contains('opt')) first.focus();
   }
@@ -437,6 +440,7 @@
 
   /** 보기(i)나 직접 입력(i = -1)으로 단어를 낸다 */
   function playMove(o, i) {
+    Snd.click();
     $('#options').classList.add('busy');
     $('#direct').hidden = true;
     var btns = document.querySelectorAll('#options .opt');
@@ -664,6 +668,7 @@
       path: seg1.floor, end: end1, at: 0.5,
       show: function () {
         reveal(myLabel);
+        Snd.carve('me');
         var card = document.querySelector('#options .opt.chosen');
         if (card) card.classList.add('gone');
       }
@@ -677,6 +682,7 @@
         path: seg2.floor, end: { x: end1.x, y: y2 }, at: 0.45,
         show: function () {
           reveal(cpuLabel);
+          Snd.carve('cpu');
           renderCpu(mv.word);
           renderChain();
           Gob.set($('#game-goblin'), 'idle');
@@ -690,7 +696,7 @@
       var gt = svgEl('text', { x: end1.x, y: y3 + 1, class: 'mp-sign good' });
       gt.textContent = '출구';
       gate.appendChild(gt);
-      segs.push({ path: seg3.floor, end: { x: end1.x, y: y3 }, at: 0.45, show: function () { reveal(gate); } });
+      segs.push({ path: seg3.floor, end: { x: end1.x, y: y3 }, at: 0.45, show: function () { reveal(gate); Snd.win(); } });
     }
 
     walkSegs(segs, function () {
@@ -709,7 +715,7 @@
     t.textContent = '막다른 길';
     g.appendChild(t);
     $('#walker').className = 'walker idle';
-    setTimeout(function () { reveal(g); if (after) after(); }, reduceMotion ? 0 : 420);
+    setTimeout(function () { reveal(g); Snd.lose(); if (after) after(); }, reduceMotion ? 0 : 420);
   }
 
   function placeWalker(x, y) {
@@ -731,11 +737,12 @@
   function walkSegs(segs, done) {
     var w = $('#walker'), k = 0;
     function next() {
-      if (k >= segs.length) { w.className = 'walker idle'; done(); return; }
+      if (k >= segs.length) { w.className = 'walker idle'; Snd.stepsStop(); done(); return; }
       var seg = segs[k++];
       walkPath(seg.path, seg.at, seg.show, next);
     }
     w.className = 'walker walking';
+    Snd.stepsStart();
     next();
   }
 
@@ -809,6 +816,7 @@
     save();
     S.usedItems[k] = true;
     renderItems();
+    Snd.item();
     if (k === 'state') {
       var st = S.game.charState(S.c);
       var note = $('#item-note');
@@ -871,6 +879,7 @@
     var cpu = S.log.filter(function (e) { return e.who === 'cpu'; }).pop();
     renderCpu(cpu.word);
     renderChain();
+    Snd.undo();
     toast('전 턴으로 돌아왔어요. (전 턴으로 돌아가기 ' + saved.items.undo + '개 남음)');
     playerTurn();
   }
@@ -1095,6 +1104,21 @@
     if (t.dataset.i != null) { pick(+t.dataset.i); return; }
     if (t.dataset.item) { useItem(t.dataset.item); return; }
   });
+  function renderMute() {
+    var b = $('#mute'), off = Snd.isMuted();
+    b.classList.toggle('off', off);
+    b.setAttribute('aria-pressed', off ? 'true' : 'false');
+    var label = off ? '소리 켜기' : '소리 끄기';
+    b.textContent = off ? '🔇' : '🔈';
+    b.title = label;
+    b.setAttribute('aria-label', label);
+  }
+  $('#mute').addEventListener('click', function () {
+    Snd.setMuted(!Snd.isMuted());
+    renderMute();
+    if (!Snd.isMuted()) Snd.click();
+  });
+
   $('#item-add').addEventListener('click', openAdmin);
   $('#direct-toggle').addEventListener('click', openDirect);
   $('#direct').addEventListener('submit', function (ev) { ev.preventDefault(); submitDirect(); });
@@ -1106,6 +1130,8 @@
   function leaveGame() {
     var o = S && S.opts;
     stopSession();
+    Snd.stepsStop();
+    Snd.bgmStop();
     if (!o) { show('title'); return; }
     if (o.kind === 'random') show('random');
     else show(o.stage.tutorial ? 'title' : 'stages');
@@ -1149,6 +1175,8 @@
   /* ---------- 시작 ---------- */
   function boot() {
     Gob.setAll('idle');
+    Snd.init();
+    renderMute();
     loadScript('data/meta.js').then(function () {
       App.words = new E.WordStore(KM.meta.posLabels);
       KM.meta.dicts.forEach(function (m) { App.dicts[m.id] = { meta: m, ready: false }; });

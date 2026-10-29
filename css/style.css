@@ -815,3 +815,22 @@ p { margin: 0; }
   .opt .w { font-size: 16px; }
   .opt { padding: 6px 8px 7px; }
 }
+
+/* ---------- 소리 끄기/켜기 ---------- */
+.mute {
+  position: fixed; z-index: 30;
+  right: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  font-size: 18px; line-height: 1;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  box-shadow: 0 3px 0 var(--ink);
+  opacity: .75;
+}
+.mute:hover { opacity: 1; }
+.mute:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.mute.off { background: var(--bg-deep); }
