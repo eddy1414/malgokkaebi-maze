@@ -14,12 +14,29 @@
   var AC = root.AudioContext || root.webkitAudioContext;
   var ctx = null, master = null;
   var tracks = { lobby: null, game: null };
-  var VOL = { lobby: 0.3, game: 0.22 };     // 게임 쪽 곡이 더 커서 조금 낮춘다
+  var VOL = { lobby: 0.18, game: 0.13 };    // 배경음악 음량 (게임 쪽 곡이 더 커서 더 낮춘다)
+  var DUCK = 0.35;                          // 클릭할 때 배경음악을 이만큼으로 잠깐 줄인다
   var GAP = { lobby: 2500, game: 4000 };    // 한 번 끝나면 이만큼 쉬었다가 다시 (ms)
   var bgmWanted = null, started = false, gapTimer = null;
 
   /** 부드럽게 줄이고 멈춤 */
   function clearGap() { if (gapTimer) { clearTimeout(gapTimer); gapTimer = null; } }
+
+  var duckTimer = null;
+  /** 효과음이 묻히지 않게 배경음악을 잠깐 낮춘다 */
+  function duck() {
+    var el = bgmWanted && tracks[bgmWanted];
+    if (!el || el.paused || muted) return;
+    var full = VOL[bgmWanted];
+    el.volume = full * DUCK;
+    if (duckTimer) clearTimeout(duckTimer);
+    var step = 0;
+    duckTimer = setInterval(function () {
+      step++;
+      el.volume = Math.min(full, full * (DUCK + (1 - DUCK) * step / 6));
+      if (step >= 6) { clearInterval(duckTimer); duckTimer = null; el.volume = full; }
+    }, 45);
+  }
 
   function fadeOut(el) {
     var step = el.volume / 8;
@@ -94,8 +111,10 @@
   var Snd = {
     /** 버튼 누르는 소리 — 나무를 톡 치는 듯한 짧고 낮은 타격감 */
     click: function () {
-      noise({ dur: 0.035, freq: 1500, q: 1.4, gain: 0.05 });
-      tone({ freq: 190, to: 130, dur: 0.06, type: 'sine', gain: 0.07 });
+      duck();
+      noise({ dur: 0.03, freq: 2600, q: 1.1, gain: 0.07 });    // 또렷하게 들리는 윗소리
+      noise({ dur: 0.04, freq: 1400, q: 1.4, gain: 0.08 });
+      tone({ freq: 200, to: 130, dur: 0.07, type: 'sine', gain: 0.11 });
     },
     /** 탈출 — 결과창이 뜰 때 */
     win: function () {
@@ -112,6 +131,7 @@
 
     /* ---------- 배경음악 (화면마다 다른 곡) ---------- */
     bgm: function (which) {
+      if (duckTimer) { clearInterval(duckTimer); duckTimer = null; }
       if (which !== bgmWanted) clearGap();
       bgmWanted = which || null;
       Object.keys(tracks).forEach(function (k) {

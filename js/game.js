@@ -6,7 +6,7 @@
   var Gob = window.KMGoblin;
   var Snd = window.KMSound;
   var KM = window.KM = window.KM || {};
-  var DATA_VER = '8';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
+  var DATA_VER = '9';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
   var $ = function (s) { return document.querySelector(s); };
   var last = function (w) { return w[w.length - 1]; };
 
