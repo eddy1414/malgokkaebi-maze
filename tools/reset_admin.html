@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>관리자 암호 초기화</title>
+<style>
+  body { font-family: "Malgun Gothic", sans-serif; max-width: 520px; margin: 40px auto; padding: 0 16px; line-height: 1.6; }
+  button { font: inherit; padding: 8px 16px; cursor: pointer; }
+  #msg { margin-top: 12px; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>말도깨비 미로 — 관리자 암호 초기화</h1>
+<p>관리자 암호를 잊었을 때만 쓰세요. 이 브라우저에 저장된 관리자 암호를 지웁니다. 스테이지 진행 상황과 아이템 수량은 그대로 남습니다.</p>
+<p>지운 뒤 게임에서 ‘아이템 추가’를 누르면 새 암호를 정할 수 있어요. <b>게임을 열었던 것과 같은 브라우저</b>로 이 파일을 열어야 합니다.</p>
+<button id="go">관리자 암호 지우기</button>
+<p id="msg"></p>
+<script>
+document.getElementById('go').onclick = function () {
+  if (!confirm('관리자 암호를 지울까요?')) return;
+  try { localStorage.removeItem('km-maze-admin'); document.getElementById('msg').textContent = '지웠어요. 이제 게임에서 새 암호를 정하세요.'; }
+  catch (e) { document.getElementById('msg').textContent = '지우지 못했어요: ' + e.message; }
+};
+</script>
+</body>
+</html>

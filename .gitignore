@@ -1,0 +1,4 @@
+# 데이터 원본 (크고, 다시 받을 수 있음)
+tools/raw/
+tools/__pycache__/
+tools/*_log*.txt
