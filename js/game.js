@@ -185,7 +185,7 @@
   /* ---------- 첫 화면: 사전 선택 ---------- */
   function ruleText(d) {
     var src = d.id === 'ext' ? '우리말샘' : '표준국어대사전';
-    return '<p><strong>이 게임은 끄투룰</strong>(' + src + '의 단어 모두 허용 — 동사·형용사 제외 모든 품사)<strong>을 기반으로 만들었습니다.</strong></p>' +
+    return '<p><strong>이 게임은 끄투룰</strong>(' + src + '의 용언(동사·형용사) 제외 모든 단어 허용)<strong>을 기반으로 만들었습니다.</strong></p>' +
       '<p><strong>컴퓨터는 항상 최적의 수를 플레이합니다.</strong> 이길 수 있으면 가장 빨리 이기고, 질 수밖에 없으면 가장 오래 버팁니다.</p>' +
       '<p class="small muted">단어 목록: ' + esc(d.name) + ' · 두 글자 이상 · 두음 법칙 적용 · 한 판에서 같은 단어는 한 번만</p>';
   }
@@ -396,7 +396,7 @@
     return {
       used: new Set(S.game.used), usedPair: new Map(S.game.usedPair), chain: S.chain.slice(), logLen: S.log.length,
       c: S.c, coachStarted: S.coachStarted, coachLost: S.coachLost,
-      map: S.map ? { x: S.map.x, y: S.map.y, W: S.map.W, html: $('#map-svg').innerHTML } : null
+      map: S.map ? { x: S.map.x, y: S.map.y, W: S.map.W, sideDir: S.map.sideDir, html: $('#map-svg').innerHTML } : null
     };
   }
 
@@ -655,6 +655,23 @@
     return Math.round(Math.max(112, Math.min(FORK_H, viewH * CAM_Y - 150)));
   }
 
+  /** 직접 입력으로 낸 단어 — 팻말에 없던 좁은 샛길이 옆으로 열린다 */
+  function sideWay(fh) {
+    var m = S.map, edge = sideMargin();
+    var outer = m.branches.length ? Math.max.apply(null, m.branches.map(function (b) { return Math.abs(b.x - m.x); })) : 0;
+    var off = Math.min(Math.max(outer + 72, 150), 300);   // 어떤 팻말보다도 바깥쪽으로
+    m.sideDir = m.sideDir === 1 ? -1 : 1;                 // 쓸 때마다 반대쪽으로
+    var dir = m.sideDir;
+    if (m.x + dir * off > m.W - edge || m.x + dir * off < edge) dir = -dir;
+    m.sideDir = dir;
+    var x = Math.round(m.x + dir * off), y = Math.round(m.y - fh);
+    return {
+      x: x, y: y, dir: dir, off: off,
+      d: 'M' + m.x + ',' + m.y + ' C' + m.x + ',' + Math.round(m.y - fh * 0.5) +
+        ' ' + x + ',' + Math.round(y + fh * 0.55) + ' ' + x + ',' + y
+    };
+  }
+
   /** (x,y) 에서 곧장 위로 뻗는 복도. 길은 제자리로 돌아오지 않고, 화면이 캐릭터를 따라 옆으로 움직인다 */
   function corridor(x, y, h) {
     var y2 = Math.round(y - h);
@@ -679,9 +696,12 @@
       seg1 = br.seg;
       seg1.floor.classList.add('taken');
       end1 = { x: br.x, y: br.y };
-    } else {   // 직접 입력: 새 길을 낸다
-      end1 = { x: m.x, y: m.y - forkHeight() };
-      seg1 = segment('M' + m.x + ',' + m.y + ' L' + end1.x + ',' + end1.y, 'taken');
+    } else {   // 직접 입력: 팻말에 없던 샛길이 열린다
+      var fh = forkHeight(), way = sideWay(fh);
+      end1 = { x: way.x, y: way.y };
+      seg1 = segment(way.d, 'taken narrow');
+      seg1.wall.classList.add('narrow');
+      mapSign(way.x + way.dir * 36, way.y + 5, '샛길', '');   // 길 끝 옆에 작게
     }
     var myLabel = floorWord(seg1, myWord, 'me', true);
     segs.push({
@@ -962,7 +982,7 @@
     S.coachLost = snap.coachLost;
     if (snap.map) {
       $('#map-svg').innerHTML = snap.map.html;
-      S.map = { W: snap.map.W, x: snap.map.x, y: snap.map.y, branches: [] };
+      S.map = { W: snap.map.W, x: snap.map.x, y: snap.map.y, sideDir: snap.map.sideDir, branches: [] };
       $('#walker').hidden = false;
       $('#walker').className = 'walker idle';
       placeWalker(snap.map.x, snap.map.y);

@@ -757,6 +757,8 @@ p { margin: 0; }
 .mp-floor { fill: none; stroke: var(--surface); stroke-width: 50; stroke-linecap: round; stroke-linejoin: round; }
 .mp-floor.taken { stroke: var(--gold-soft); }
 .mp-floor.dim { opacity: .34; }
+.mp-wall.narrow { stroke-width: 40; }      /* 샛길은 좁다 */
+.mp-floor.narrow { stroke-width: 30; }
 .mp-wall.dim { opacity: .12; }
 .mp-plate { fill: var(--surface-2); opacity: .92; }
 .mp-label, .mp-hide { transition: opacity .28s ease-out; }
