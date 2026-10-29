@@ -6,6 +6,7 @@
   var Gob = window.KMGoblin;
   var Snd = window.KMSound;
   var KM = window.KM = window.KM || {};
+  var DATA_VER = '8';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
   var $ = function (s) { return document.querySelector(s); };
   var last = function (w) { return w[w.length - 1]; };
 
@@ -66,8 +67,8 @@
       chain = chain.then(function () {
         setLoad(i / files.length, d.meta.name + ' 불러오는 중… (' + (i + 1) + '/' + files.length + ')');
         // 스테이지 파일이 없으면(아직 안 만들었으면) 스테이지 없이 랜덤 대결만 쓸 수 있게 넘어간다
-        if (/^stages_/.test(f)) return loadScript('data/' + f).catch(function () { /* 없음 */ });
-        return loadScript('data/' + f);
+        if (/^stages_/.test(f)) return loadScript('data/' + f + '?v=' + DATA_VER).catch(function () { /* 없음 */ });
+        return loadScript('data/' + f + '?v=' + DATA_VER);
       }).then(function () {
         App.files.add(f);
         i++;
@@ -481,7 +482,7 @@
     var d = App.dicts[dictId];
     var chain = Promise.resolve();
     d.meta.listFiles.forEach(function (f) {
-      chain = chain.then(function () { return App.files.has(f) ? null : loadScript('data/' + f).then(function () { App.files.add(f); }); });
+      chain = chain.then(function () { return App.files.has(f) ? null : loadScript('data/' + f + '?v=' + DATA_VER).then(function () { App.files.add(f); }); });
     });
     return chain.then(function () {
       var set = new Set();
@@ -1177,7 +1178,7 @@
     Gob.setAll('idle');
     Snd.init();
     renderMute();
-    loadScript('data/meta.js').then(function () {
+    loadScript('data/meta.js?v=' + DATA_VER).then(function () {
       App.words = new E.WordStore(KM.meta.posLabels);
       KM.meta.dicts.forEach(function (m) { App.dicts[m.id] = { meta: m, ready: false }; });
       if (!App.dicts[App.dictId]) App.dictId = 'std';
