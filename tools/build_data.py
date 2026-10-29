@@ -44,7 +44,7 @@ POS_FROM_STD = {v: i for i, v in enumerate(POS_LABEL)}
 BANNED_STD_POS = {'동사', '형용사', '보조 동사', '보조 형용사', '어미', '조사', '접사'}
 
 K_PER_PAIR = 2        # (첫 글자, 끝 글자) 조합마다 화면에 쓸 단어 수
-DEF_MAX = 72          # 뜻풀이 한 항목 최대 글자 수
+DEF_MAX = 115          # 뜻풀이 한 항목 최대 글자 수
 CHUNK_ROWS = 45000    # words_*.js 한 파일의 단어 수
 
 # 튜토리얼·예시 스테이지에서 반드시 써야 하는 단어

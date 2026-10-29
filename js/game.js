@@ -6,7 +6,7 @@
   var Gob = window.KMGoblin;
   var Snd = window.KMSound;
   var KM = window.KM = window.KM || {};
-  var DATA_VER = '11';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
+  var DATA_VER = '12';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
   var $ = function (s) { return document.querySelector(s); };
   var last = function (w) { return w[w.length - 1]; };
 
@@ -613,7 +613,7 @@
   /** 지나온 길 바닥에 단어를 적는다 */
   function floorWord(seg, word, who, hidden) {
     var len = seg.floor.getTotalLength(), p = seg.floor.getPointAtLength(len * 0.5);
-    var g = addTo('marks', 'g', { class: 'mp-label mp-' + who + (hidden ? ' mp-hide' : '') });
+    var g = addTo('marks', 'g', { class: 'mp-label mp-' + who + (hidden ? ' mp-hide' : ''), 'data-word': word });
     var w = Math.max(46, word.length * 16 + 18);
     g.appendChild(svgEl('rect', { x: Math.round(p.x - w / 2), y: Math.round(p.y - 14), width: w, height: 28, rx: 8, class: 'mp-plate' }));
     var t = svgEl('text', { x: Math.round(p.x), y: Math.round(p.y + 5), class: 'mp-word', 'text-anchor': 'middle' });
@@ -793,57 +793,83 @@
     })();
   }
 
-  /* ---------- 팻말 길게 누르기(또는 마우스 올리기) → 뜻 전체 ---------- */
-  var tipTimer = null, tipShown = false;
+  /* ---------- 길게 누르기(또는 마우스 올리기) → 뜻 전체 보기 ----------
+   * 갈림길 팻말과, 지나온 길 바닥에 적힌 단어 모두에서 쓴다.
+   * 한 번 뜬 설명창은 다른 곳을 누르거나 다음 차례가 될 때까지 그대로 둔다.
+   */
+  var tipTimer = null, tipMode = null, tipFrom = null, pressShowed = false;
 
-  function showTip(btn) {
-    var i = +btn.dataset.i, o = S && S.cur && S.cur[i];
-    if (!o) return;
+  /** 설명창에 넣을 단어 정보 찾기 */
+  function tipWord(el) {
+    if (el.classList.contains('opt')) {
+      var o = S && S.cur && S.cur[+el.dataset.i];
+      return o && o.word;
+    }
+    var w = el.getAttribute('data-word');
+    if (!w) return null;
+    return App.words.info.get(w) || { word: w, pos: '', def: '' };
+  }
+
+  function showTip(el, mode) {
+    var w = tipWord(el);
+    if (!w) return;
     var tip = $('#tip');
-    tip.innerHTML = '<div class="tw">' + esc(o.word.word) + '</div>' +
-      '<div class="td">' + posHtml(o.word) + defHtml(o.word) + '</div>';
+    tip.innerHTML = '<div class="tw">' + esc(w.word) + '</div>' +
+      '<div class="td">' + posHtml(w) + defHtml(w) + '</div>' +
+      '<div class="tc">다른 곳을 누르면 닫혀요</div>';
     tip.hidden = false;
-    var r = btn.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    var r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
     var left = Math.max(12, Math.min(window.innerWidth - t.width - 12, r.left + r.width / 2 - t.width / 2));
     var top = r.top - t.height - 10;
     if (top < 12) top = Math.min(window.innerHeight - t.height - 12, r.bottom + 10);
     tip.style.left = Math.round(left) + 'px';
     tip.style.top = Math.round(top) + 'px';
-    tipShown = true;
+    tipMode = mode;
+    tipFrom = el;
   }
   function hideTip() {
     if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
     $('#tip').hidden = true;
+    tipMode = null;
+    tipFrom = null;
   }
-  function armTip(btn, delay) {
+  function armTip(el, delay, mode) {
     if (tipTimer) clearTimeout(tipTimer);
-    tipTimer = setTimeout(function () { tipTimer = null; showTip(btn); }, delay);
+    tipTimer = setTimeout(function () {
+      tipTimer = null;
+      showTip(el, mode);
+      if (mode === 'press') pressShowed = true;
+    }, delay);
   }
+
   document.addEventListener('pointerdown', function (ev) {
-    var b = ev.target.closest && ev.target.closest('.opt');
-    tipShown = false;
-    if (b && !b.disabled) armTip(b, 450);          // 길게 누르기
+    var tip = $('#tip');
+    if (!tip.hidden && ev.target.closest && ev.target.closest('#tip')) return;   // 설명창 안쪽은 그대로
+    pressShowed = false;
+    var el = ev.target.closest && ev.target.closest('.opt, .mp-label');
+    if (!tip.hidden && el !== tipFrom) hideTip();      // 다른 곳을 누르면 닫힌다
+    if (el && !el.disabled) armTip(el, 420, 'press');
   });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (e) {
+  ['pointerup', 'pointercancel'].forEach(function (e) {
     document.addEventListener(e, function () {
       if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
-      if (tipShown) setTimeout(hideTip, 1200);     // 손을 떼도 잠깐 더 보여 준다
     });
   });
-  // 누르고 있다 손을 뗄 때는 선택되지 않게
+  // 길게 눌렀다 뗄 때는 그 길이 선택되지 않게
   document.addEventListener('click', function (ev) {
-    if (!tipShown) return;
-    tipShown = false;
+    if (!pressShowed) return;
+    pressShowed = false;
     var b = ev.target.closest && ev.target.closest('.opt');
     if (b) { ev.stopPropagation(); ev.preventDefault(); }
   }, true);
-  // 마우스는 올려만 둬도 보여 준다
+  // 마우스는 올려만 둬도 보여 주고, 벗어나면 닫는다
   document.addEventListener('mouseover', function (ev) {
-    var b = ev.target.closest && ev.target.closest('.opt');
-    if (b && !b.disabled && ev.pointerType !== 'touch') armTip(b, 550);
+    var el = ev.target.closest && ev.target.closest('.opt, .mp-label');
+    if (el && !el.disabled && (tipMode !== 'press')) armTip(el, 520, 'hover');
   });
   document.addEventListener('mouseout', function (ev) {
-    if (ev.target.closest && ev.target.closest('.opt')) { hideTip(); tipShown = false; }
+    if (tipMode === 'press') return;
+    if (ev.target.closest && ev.target.closest('.opt, .mp-label')) hideTip();
   });
 
   /** 팻말(보기 버튼)을 길 끝에 놓는다 */
