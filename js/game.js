@@ -116,6 +116,7 @@
   var SCREENS = ['load', 'title', 'stages', 'random', 'help', 'game'];
   function show(name) {
     SCREENS.forEach(function (s) { $('#scr-' + s).hidden = s !== name; });
+    if (name !== 'game' && name !== 'load') Snd.bgm('lobby');
     $('#result').hidden = true;
     $('#ask').hidden = true;
     window.scrollTo(0, 0);
@@ -304,7 +305,7 @@
       coachIdx: 0, timer: null, token: {}, history: []
     };
     show('game');
-    Snd.bgmStart();
+    Snd.bgm('game');
     $('#game-title').textContent = opts.title;
     $('#game-dict').textContent = d.meta.name;
     Gob.set($('#game-goblin'), 'idle');
@@ -428,7 +429,6 @@
     resetDirect();
     placeOptions();
     followMap();
-    if (S.chain.length > 1) Snd.fork();
     var first = $('#options .opt');
     if (first && document.activeElement && document.activeElement.classList.contains('opt')) first.focus();
   }
@@ -440,7 +440,6 @@
 
   /** 보기(i)나 직접 입력(i = -1)으로 단어를 낸다 */
   function playMove(o, i) {
-    Snd.click();
     $('#options').classList.add('busy');
     $('#direct').hidden = true;
     var btns = document.querySelectorAll('#options .opt');
@@ -668,7 +667,6 @@
       path: seg1.floor, end: end1, at: 0.5,
       show: function () {
         reveal(myLabel);
-        Snd.carve('me');
         var card = document.querySelector('#options .opt.chosen');
         if (card) card.classList.add('gone');
       }
@@ -682,7 +680,6 @@
         path: seg2.floor, end: { x: end1.x, y: y2 }, at: 0.45,
         show: function () {
           reveal(cpuLabel);
-          Snd.carve('cpu');
           renderCpu(mv.word);
           renderChain();
           Gob.set($('#game-goblin'), 'idle');
@@ -696,7 +693,7 @@
       var gt = svgEl('text', { x: end1.x, y: y3 + 1, class: 'mp-sign good' });
       gt.textContent = '출구';
       gate.appendChild(gt);
-      segs.push({ path: seg3.floor, end: { x: end1.x, y: y3 }, at: 0.45, show: function () { reveal(gate); Snd.win(); } });
+      segs.push({ path: seg3.floor, end: { x: end1.x, y: y3 }, at: 0.45, show: function () { reveal(gate); } });
     }
 
     walkSegs(segs, function () {
@@ -715,7 +712,7 @@
     t.textContent = '막다른 길';
     g.appendChild(t);
     $('#walker').className = 'walker idle';
-    setTimeout(function () { reveal(g); Snd.lose(); if (after) after(); }, reduceMotion ? 0 : 420);
+    setTimeout(function () { reveal(g); if (after) after(); }, reduceMotion ? 0 : 420);
   }
 
   function placeWalker(x, y) {
@@ -737,12 +734,11 @@
   function walkSegs(segs, done) {
     var w = $('#walker'), k = 0;
     function next() {
-      if (k >= segs.length) { w.className = 'walker idle'; Snd.stepsStop(); done(); return; }
+      if (k >= segs.length) { w.className = 'walker idle'; done(); return; }
       var seg = segs[k++];
       walkPath(seg.path, seg.at, seg.show, next);
     }
     w.className = 'walker walking';
-    Snd.stepsStart();
     next();
   }
 
@@ -816,7 +812,6 @@
     save();
     S.usedItems[k] = true;
     renderItems();
-    Snd.item();
     if (k === 'state') {
       var st = S.game.charState(S.c);
       var note = $('#item-note');
@@ -879,7 +874,6 @@
     var cpu = S.log.filter(function (e) { return e.who === 'cpu'; }).pop();
     renderCpu(cpu.word);
     renderChain();
-    Snd.undo();
     toast('전 턴으로 돌아왔어요. (전 턴으로 돌아가기 ' + saved.items.undo + '개 남음)');
     playerTurn();
   }
@@ -1030,12 +1024,14 @@
     }, 700);
   }
 
-  function showResult(won) {
+  function showResult(won, silent) {
     $('#result').hidden = false;
+    if (!silent) { if (won) Snd.win(); else Snd.lose(); }
     var next = $('#res-next');
     (won && !next.hidden ? next : $('#res-list')).focus();
   }
   function openAsk(msg) {
+    Snd.lose();
     Gob.set($('#ask-goblin'), 'smug');
     $('#ask-msg').textContent = msg + ' 전 턴으로 돌아갈까요?';
     $('#ask-left').textContent = '전 턴으로 돌아가기 아이템 ' + saved.items.undo + '개 남음';
@@ -1118,6 +1114,11 @@
     renderMute();
     if (!Snd.isMuted()) Snd.click();
   });
+  // 어떤 버튼을 누르든 가벼운 타격음 (마우스·터치·키보드 모두)
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('button');
+    if (b && b.id !== 'mute' && !b.disabled) Snd.click();
+  }, true);
 
   $('#item-add').addEventListener('click', openAdmin);
   $('#direct-toggle').addEventListener('click', openDirect);
@@ -1130,8 +1131,7 @@
   function leaveGame() {
     var o = S && S.opts;
     stopSession();
-    Snd.stepsStop();
-    Snd.bgmStop();
+    Snd.bgm('lobby');
     if (!o) { show('title'); return; }
     if (o.kind === 'random') show('random');
     else show(o.stage.tutorial ? 'title' : 'stages');
@@ -1147,7 +1147,7 @@
   $('#game-exit').addEventListener('click', leaveGame);
   $('#game-retry').addEventListener('click', restartGame);
   $('#ask-yes').addEventListener('click', function () { closeAsk(); undoTurn(); });
-  $('#ask-no').addEventListener('click', function () { closeAsk(); showResult(false); });
+  $('#ask-no').addEventListener('click', function () { closeAsk(); showResult(false, true); });
   $('#res-list').addEventListener('click', leaveGame);
   $('#res-retry').addEventListener('click', restartGame);
   $('#res-next').addEventListener('click', function () {
@@ -1168,7 +1168,7 @@
       return;
     }
     var k = parseInt(ev.key, 10);
-    if (k >= 1 && k <= 4) pick(k - 1);
+    if (k >= 1 && k <= 4) { Snd.click(); pick(k - 1); }
     if (ev.key === 'Escape') $('#game-exit').click();
   });
 

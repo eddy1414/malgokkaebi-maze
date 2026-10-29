@@ -13,7 +13,21 @@
 
   var AC = root.AudioContext || root.webkitAudioContext;
   var ctx = null, master = null;
-  var bgm = null, bgmWanted = false, started = false;
+  var tracks = { lobby: null, game: null };
+  var VOL = { lobby: 0.3, game: 0.22 };     // 게임 쪽 곡이 더 커서 조금 낮춘다
+  var GAP = { lobby: 2500, game: 4000 };    // 한 번 끝나면 이만큼 쉬었다가 다시 (ms)
+  var bgmWanted = null, started = false, gapTimer = null;
+
+  /** 부드럽게 줄이고 멈춤 */
+  function clearGap() { if (gapTimer) { clearTimeout(gapTimer); gapTimer = null; } }
+
+  function fadeOut(el) {
+    var step = el.volume / 8;
+    var t = setInterval(function () {
+      el.volume = Math.max(0, el.volume - step);
+      if (el.volume <= 0.001) { clearInterval(t); el.pause(); el.currentTime = 0; }
+    }, 40);
+  }
 
   /* 국악 느낌의 5음계 (평조) — 효과음 음높이를 여기서 고른다 */
   var SCALE = [0, 2, 4, 7, 9];
@@ -77,72 +91,41 @@
     src.start(t0);
   }
 
-  var stepTimer = null, stepFlip = false;
-
   var Snd = {
-    /** 팻말 고르기 */
+    /** 버튼 누르는 소리 — 나무를 톡 치는 듯한 짧고 낮은 타격감 */
     click: function () {
-      tone({ freq: note(2, 1), dur: 0.09, type: 'triangle', gain: 0.22 });
-      tone({ freq: note(4, 1), dur: 0.12, type: 'sine', gain: 0.14, delay: 0.05 });
+      noise({ dur: 0.035, freq: 1500, q: 1.4, gain: 0.05 });
+      tone({ freq: 190, to: 130, dur: 0.06, type: 'sine', gain: 0.07 });
     },
-    /** 걷기 시작/끝 — 일정한 간격으로 발소리 */
-    stepsStart: function () {
-      Snd.stepsStop();
-      var beat = function () {
-        stepFlip = !stepFlip;
-        noise({ dur: 0.07, freq: stepFlip ? 620 : 520, q: 1.2, gain: 0.1 });
-        tone({ freq: stepFlip ? 110 : 96, dur: 0.07, type: 'sine', gain: 0.1 });
-      };
-      beat();
-      stepTimer = setInterval(beat, 330);
-    },
-    stepsStop: function () {
-      if (stepTimer) { clearInterval(stepTimer); stepTimer = null; }
-    },
-    /** 바닥에 단어가 새겨질 때 — 내 단어는 높게, 말도깨비 단어는 낮게 */
-    carve: function (who) {
-      var me = who === 'me';
-      noise({ dur: 0.12, freq: me ? 1400 : 900, q: 2, gain: 0.12 });
-      tone({ freq: me ? note(3, 1) : note(0, 0), dur: 0.22, type: 'triangle', gain: 0.16 });
-    },
-    /** 갈림길 도착 */
-    fork: function () {
-      tone({ freq: note(0, 1), dur: 0.16, type: 'sine', gain: 0.12 });
-      tone({ freq: note(2, 1), dur: 0.22, type: 'sine', gain: 0.1, delay: 0.09 });
-    },
-    /** 탈출 */
+    /** 탈출 — 결과창이 뜰 때 */
     win: function () {
       [0, 1, 2, 4].forEach(function (d, i) {
-        tone({ freq: note(d, 1), dur: 0.5, type: 'triangle', gain: 0.2, delay: i * 0.12 });
+        tone({ freq: note(d, 1), dur: 0.45, type: 'triangle', gain: 0.17, delay: i * 0.12 });
       });
-      tone({ freq: note(0, 2), dur: 0.9, type: 'sine', gain: 0.14, delay: 0.48 });
+      tone({ freq: note(0, 2), dur: 0.8, type: 'sine', gain: 0.12, delay: 0.48 });
     },
-    /** 막다른 길 */
+    /** 막다른 길 — 결과창이 뜰 때 */
     lose: function () {
-      noise({ dur: 0.3, freq: 180, type: 'lowpass', q: 0.8, gain: 0.3 });
-      tone({ freq: 150, to: 70, dur: 0.5, type: 'triangle', gain: 0.22 });
-    },
-    /** 아이템 */
-    item: function () {
-      tone({ freq: note(2, 1), dur: 0.1, type: 'sine', gain: 0.16 });
-      tone({ freq: note(4, 1), dur: 0.1, type: 'sine', gain: 0.16, delay: 0.07 });
-      tone({ freq: note(0, 2), dur: 0.2, type: 'sine', gain: 0.13, delay: 0.14 });
-    },
-    /** 전 턴으로 돌아가기 */
-    undo: function () {
-      tone({ freq: note(4, 1), to: note(0, 0), dur: 0.35, type: 'triangle', gain: 0.18 });
+      noise({ dur: 0.3, freq: 180, type: 'lowpass', q: 0.8, gain: 0.22 });
+      tone({ freq: 150, to: 70, dur: 0.5, type: 'triangle', gain: 0.18 });
     },
 
-    /* ---------- 배경음악 ---------- */
-    bgmStart: function () {
-      bgmWanted = true;
-      if (!bgm || muted) return;
-      var p = bgm.play();
-      if (p && p.catch) p.catch(function () { /* 아직 사람이 누르지 않음 */ });
-    },
-    bgmStop: function () {
-      bgmWanted = false;
-      if (bgm) bgm.pause();
+    /* ---------- 배경음악 (화면마다 다른 곡) ---------- */
+    bgm: function (which) {
+      if (which !== bgmWanted) clearGap();
+      bgmWanted = which || null;
+      Object.keys(tracks).forEach(function (k) {
+        var el = tracks[k];
+        if (!el) return;
+        if (k === bgmWanted && !muted) {
+          if (gapTimer) return;                 // 쉬는 중이면 그대로 둔다
+          el.volume = VOL[k];
+          var p = el.play();
+          if (p && p.catch) p.catch(function () { /* 아직 사람이 누르지 않음 */ });
+        } else if (!el.paused) {
+          fadeOut(el);
+        }
+      });
     },
 
     isMuted: function () { return muted; },
@@ -150,29 +133,44 @@
       muted = !!v;
       try { localStorage.setItem(LS_KEY, muted ? 'off' : 'on'); } catch (e) { /* 저장 안 됨 */ }
       if (muted) {
-        Snd.stepsStop();
-        if (bgm) bgm.pause();
+        clearGap();
+        Object.keys(tracks).forEach(function (k) { if (tracks[k]) tracks[k].pause(); });
         if (master) master.gain.value = 0;
       } else {
         if (master) master.gain.value = 0.85;
         ensure();
-        if (bgmWanted) Snd.bgmStart();
+        if (bgmWanted) Snd.bgm(bgmWanted);
       }
       return muted;
     },
 
     /** 페이지에서 한 번 부른다 */
     init: function () {
-      bgm = document.getElementById('bgm');
-      if (bgm) {
-        bgm.volume = 0.3;
-        bgm.addEventListener('error', function () { bgm = null; });   // 음원 파일이 없으면 조용히 넘어간다
-      }
+      Object.keys(tracks).forEach(function (k) {
+        var el = document.getElementById('bgm-' + k);
+        if (!el) return;
+        el.volume = VOL[k];
+        el.loop = false;                        // 끝나면 잠깐 쉬었다가 다시 튼다
+        el.addEventListener('error', function () { tracks[k] = null; });   // 파일이 없으면 조용히 넘어간다
+        el.addEventListener('ended', function () {
+          if (bgmWanted !== k || muted) return;
+          clearGap();
+          gapTimer = setTimeout(function () {
+            gapTimer = null;
+            if (bgmWanted !== k || muted) return;
+            el.currentTime = 0;
+            el.volume = VOL[k];
+            var p = el.play();
+            if (p && p.catch) p.catch(function () { /* 막힘 */ });
+          }, GAP[k]);
+        });
+        tracks[k] = el;
+      });
       var wake = function () {
         if (started) return;
         started = true;
         ensure();
-        if (bgmWanted) Snd.bgmStart();
+        if (bgmWanted) Snd.bgm(bgmWanted);
       };
       document.addEventListener('pointerdown', wake);
       document.addEventListener('keydown', wake);
