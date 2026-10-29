@@ -558,6 +558,7 @@
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var MAP_H = 9000, FORK_H = 176, CORR_H = 150;
   var SIDE = 98;             // 길이 지도 가장자리에서 떨어지는 거리 (팻말 절반 너비 + 여유)
+  var DRIFT = 3400;          // 옆길로 계속 가도 지도가 끊기지 않게 좌우로 두는 여유 폭
   var CAM_Y = 0.62;          // 캐릭터가 서 있는 화면 높이 비율
   var SPEED = 0.26;          // 걷는 속도 (픽셀/ms) — 길이와 상관없이 일정
 
@@ -573,7 +574,7 @@
   }
   function mapWidth() {
     var view = $('#map').clientWidth || 640;
-    return Math.max(1600, Math.round(view * 2.5));   // 보이는 폭보다 넓게 잡아 좌우로 움직일 여지를 둔다
+    return Math.max(1600, view + DRIFT * 2);   // 갈림길마다 옆으로 흘러가도 지도가 남아 있게
   }
   /** 팻말 절반 너비 (CSS 가 화면 폭에 따라 정하므로 실제 값을 재서 쓴다) */
   function sideMargin() {
@@ -590,7 +591,7 @@
     svg.innerHTML = '<g id="mp-walls"></g><g id="mp-floors"></g><g id="mp-marks"></g>';
     $('#map-inner').style.width = W + 'px';
     $('#map-inner').style.height = MAP_H + 'px';
-    S.map = { W: W, x: Math.round(W / 2), home: Math.round(W / 2), y: MAP_H - 150, branches: [] };
+    S.map = { W: W, x: Math.round(W / 2), y: MAP_H - 150, branches: [] };
     segment('M' + S.map.x + ',' + (MAP_H + 30) + ' L' + S.map.x + ',' + S.map.y);
     mapSign(S.map.x, MAP_H - 76, '입구', '');
     $('#walker').hidden = false;
@@ -632,7 +633,7 @@
     var half = Math.max(110, visW / 2 - side);
     var step = Math.min(215, (half * 2) / Math.max(1, n - 1));
     var xs = [], i;
-    var base = m.home;   // 전 턴에 어디로 갔든 늘 같은 자리에서 갈라진다 (왼쪽 / 앞 / 오른쪽)
+    var base = m.x;   // 캐릭터가 선 자리에서 갈라진다. 화면이 캐릭터를 늘 가운데 두니 갈림길은 매번 같은 자리(왼쪽/앞/오른쪽)에 보인다
     for (i = 0; i < n; i++) xs.push(n === 1 ? base : base + (i - (n - 1) / 2) * step);
     var lo = Math.min.apply(null, xs), hi = Math.max.apply(null, xs), shift = 0;
     if (lo < side) shift = side - lo;
@@ -654,15 +655,10 @@
     return Math.round(Math.max(112, Math.min(FORK_H, viewH * CAM_Y - 150)));
   }
 
-  /** (x,y) 에서 가운데 축으로 휘어 올라가는 길. 돌아오는 거리가 멀면 더 길게 */
-  function backToHome(x, y, minH) {
-    var m = S.map, dx = m.home - x;
-    var h = Math.max(minH, Math.abs(dx) * 0.8);
+  /** (x,y) 에서 곧장 위로 뻗는 복도. 길은 제자리로 돌아오지 않고, 화면이 캐릭터를 따라 옆으로 움직인다 */
+  function corridor(x, y, h) {
     var y2 = Math.round(y - h);
-    var d = dx
-      ? 'M' + x + ',' + y + ' C' + x + ',' + Math.round(y - h * 0.5) + ' ' + m.home + ',' + Math.round(y2 + h * 0.45) + ' ' + m.home + ',' + y2
-      : 'M' + x + ',' + y + ' L' + x + ',' + y2;
-    return { d: d, x: m.home, y: y2 };
+    return { d: 'M' + x + ',' + y + ' L' + x + ',' + y2, x: x, y: y2 };
   }
 
   /**
@@ -698,7 +694,7 @@
     });
 
     if (mv) {
-      var back = backToHome(end1.x, end1.y, CORR_H);
+      var back = corridor(end1.x, end1.y, CORR_H);
       var seg2 = segment(back.d);
       var cpuLabel = floorWord(seg2, mv.word.word, 'cpu', true);
       segs.push({
@@ -711,7 +707,7 @@
         }
       });
     } else {   // 말도깨비가 막혔다 = 출구
-      var exit = backToHome(end1.x, end1.y, 120);
+      var exit = corridor(end1.x, end1.y, 120);
       var seg3 = segment(exit.d, 'taken');
       var gate = addTo('marks', 'g', { class: 'mp-hide' });
       gate.appendChild(svgEl('rect', { x: exit.x - 46, y: exit.y - 18, width: 92, height: 26, rx: 8, class: 'mp-gate' }));
@@ -966,7 +962,7 @@
     S.coachLost = snap.coachLost;
     if (snap.map) {
       $('#map-svg').innerHTML = snap.map.html;
-      S.map = { W: snap.map.W, x: snap.map.x, home: Math.round(snap.map.W / 2), y: snap.map.y, branches: [] };
+      S.map = { W: snap.map.W, x: snap.map.x, y: snap.map.y, branches: [] };
       $('#walker').hidden = false;
       $('#walker').className = 'walker idle';
       placeWalker(snap.map.x, snap.map.y);
