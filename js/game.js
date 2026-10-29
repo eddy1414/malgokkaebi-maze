@@ -6,7 +6,7 @@
   var Gob = window.KMGoblin;
   var Snd = window.KMSound;
   var KM = window.KM = window.KM || {};
-  var DATA_VER = '10';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
+  var DATA_VER = '11';   // 데이터 파일 버전 (고칠 때마다 올린다 — 브라우저가 옛 파일을 쓰지 않게)
   var $ = function (s) { return document.querySelector(s); };
   var last = function (w) { return w[w.length - 1]; };
 
@@ -425,6 +425,7 @@
         '</button>';
     }).join('');
     S.usedItems = {};
+    hideTip();
     $('#item-note').hidden = true;
     renderItems();
     resetDirect();
@@ -589,7 +590,7 @@
     svg.innerHTML = '<g id="mp-walls"></g><g id="mp-floors"></g><g id="mp-marks"></g>';
     $('#map-inner').style.width = W + 'px';
     $('#map-inner').style.height = MAP_H + 'px';
-    S.map = { W: W, x: Math.round(W / 2), y: MAP_H - 150, branches: [] };
+    S.map = { W: W, x: Math.round(W / 2), home: Math.round(W / 2), y: MAP_H - 150, branches: [] };
     segment('M' + S.map.x + ',' + (MAP_H + 30) + ' L' + S.map.x + ',' + S.map.y);
     mapSign(S.map.x, MAP_H - 76, '입구', '');
     $('#walker').hidden = false;
@@ -631,7 +632,8 @@
     var half = Math.max(110, visW / 2 - side);
     var step = Math.min(215, (half * 2) / Math.max(1, n - 1));
     var xs = [], i;
-    for (i = 0; i < n; i++) xs.push(n === 1 ? m.x : m.x + (i - (n - 1) / 2) * step);
+    var base = m.home;   // 전 턴에 어디로 갔든 늘 같은 자리에서 갈라진다 (왼쪽 / 앞 / 오른쪽)
+    for (i = 0; i < n; i++) xs.push(n === 1 ? base : base + (i - (n - 1) / 2) * step);
     var lo = Math.min.apply(null, xs), hi = Math.max.apply(null, xs), shift = 0;
     if (lo < side) shift = side - lo;
     else if (hi > m.W - side) shift = (m.W - side) - hi;
@@ -650,6 +652,17 @@
   function forkHeight() {
     var viewH = $('#map').clientHeight || 460;
     return Math.round(Math.max(112, Math.min(FORK_H, viewH * CAM_Y - 150)));
+  }
+
+  /** (x,y) 에서 가운데 축으로 휘어 올라가는 길. 돌아오는 거리가 멀면 더 길게 */
+  function backToHome(x, y, minH) {
+    var m = S.map, dx = m.home - x;
+    var h = Math.max(minH, Math.abs(dx) * 0.8);
+    var y2 = Math.round(y - h);
+    var d = dx
+      ? 'M' + x + ',' + y + ' C' + x + ',' + Math.round(y - h * 0.5) + ' ' + m.home + ',' + Math.round(y2 + h * 0.45) + ' ' + m.home + ',' + y2
+      : 'M' + x + ',' + y + ' L' + x + ',' + y2;
+    return { d: d, x: m.home, y: y2 };
   }
 
   /**
@@ -685,11 +698,11 @@
     });
 
     if (mv) {
-      var y2 = end1.y - CORR_H;
-      var seg2 = segment('M' + end1.x + ',' + end1.y + ' L' + end1.x + ',' + y2);
+      var back = backToHome(end1.x, end1.y, CORR_H);
+      var seg2 = segment(back.d);
       var cpuLabel = floorWord(seg2, mv.word.word, 'cpu', true);
       segs.push({
-        path: seg2.floor, end: { x: end1.x, y: y2 }, at: 0.45,
+        path: seg2.floor, end: { x: back.x, y: back.y }, at: 0.45,
         show: function () {
           reveal(cpuLabel);
           renderCpu(mv.word);
@@ -698,14 +711,14 @@
         }
       });
     } else {   // 말도깨비가 막혔다 = 출구
-      var y3 = end1.y - 120;
-      var seg3 = segment('M' + end1.x + ',' + end1.y + ' L' + end1.x + ',' + y3, 'taken');
+      var exit = backToHome(end1.x, end1.y, 120);
+      var seg3 = segment(exit.d, 'taken');
       var gate = addTo('marks', 'g', { class: 'mp-hide' });
-      gate.appendChild(svgEl('rect', { x: end1.x - 46, y: y3 - 18, width: 92, height: 26, rx: 8, class: 'mp-gate' }));
-      var gt = svgEl('text', { x: end1.x, y: y3 + 1, class: 'mp-sign good' });
+      gate.appendChild(svgEl('rect', { x: exit.x - 46, y: exit.y - 18, width: 92, height: 26, rx: 8, class: 'mp-gate' }));
+      var gt = svgEl('text', { x: exit.x, y: exit.y + 1, class: 'mp-sign good' });
       gt.textContent = '출구';
       gate.appendChild(gt);
-      segs.push({ path: seg3.floor, end: { x: end1.x, y: y3 }, at: 0.45, show: function () { reveal(gate); } });
+      segs.push({ path: seg3.floor, end: { x: exit.x, y: exit.y }, at: 0.45, show: function () { reveal(gate); } });
     }
 
     walkSegs(segs, function () {
@@ -779,6 +792,59 @@
       else finish();
     })();
   }
+
+  /* ---------- 팻말 길게 누르기(또는 마우스 올리기) → 뜻 전체 ---------- */
+  var tipTimer = null, tipShown = false;
+
+  function showTip(btn) {
+    var i = +btn.dataset.i, o = S && S.cur && S.cur[i];
+    if (!o) return;
+    var tip = $('#tip');
+    tip.innerHTML = '<div class="tw">' + esc(o.word.word) + '</div>' +
+      '<div class="td">' + posHtml(o.word) + defHtml(o.word) + '</div>';
+    tip.hidden = false;
+    var r = btn.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    var left = Math.max(12, Math.min(window.innerWidth - t.width - 12, r.left + r.width / 2 - t.width / 2));
+    var top = r.top - t.height - 10;
+    if (top < 12) top = Math.min(window.innerHeight - t.height - 12, r.bottom + 10);
+    tip.style.left = Math.round(left) + 'px';
+    tip.style.top = Math.round(top) + 'px';
+    tipShown = true;
+  }
+  function hideTip() {
+    if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+    $('#tip').hidden = true;
+  }
+  function armTip(btn, delay) {
+    if (tipTimer) clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { tipTimer = null; showTip(btn); }, delay);
+  }
+  document.addEventListener('pointerdown', function (ev) {
+    var b = ev.target.closest && ev.target.closest('.opt');
+    tipShown = false;
+    if (b && !b.disabled) armTip(b, 450);          // 길게 누르기
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (e) {
+    document.addEventListener(e, function () {
+      if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+      if (tipShown) setTimeout(hideTip, 1200);     // 손을 떼도 잠깐 더 보여 준다
+    });
+  });
+  // 누르고 있다 손을 뗄 때는 선택되지 않게
+  document.addEventListener('click', function (ev) {
+    if (!tipShown) return;
+    tipShown = false;
+    var b = ev.target.closest && ev.target.closest('.opt');
+    if (b) { ev.stopPropagation(); ev.preventDefault(); }
+  }, true);
+  // 마우스는 올려만 둬도 보여 준다
+  document.addEventListener('mouseover', function (ev) {
+    var b = ev.target.closest && ev.target.closest('.opt');
+    if (b && !b.disabled && ev.pointerType !== 'touch') armTip(b, 550);
+  });
+  document.addEventListener('mouseout', function (ev) {
+    if (ev.target.closest && ev.target.closest('.opt')) { hideTip(); tipShown = false; }
+  });
 
   /** 팻말(보기 버튼)을 길 끝에 놓는다 */
   function placeOptions() {
@@ -874,7 +940,7 @@
     S.coachLost = snap.coachLost;
     if (snap.map) {
       $('#map-svg').innerHTML = snap.map.html;
-      S.map = { W: snap.map.W, x: snap.map.x, y: snap.map.y, branches: [] };
+      S.map = { W: snap.map.W, x: snap.map.x, home: Math.round(snap.map.W / 2), y: snap.map.y, branches: [] };
       $('#walker').hidden = false;
       $('#walker').className = 'walker idle';
       placeWalker(snap.map.x, snap.map.y);

@@ -834,3 +834,18 @@ p { margin: 0; }
 .mute:hover { opacity: 1; }
 .mute:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
 .mute.off { background: var(--bg-deep); }
+
+/* ---------- 팻말 길게 누르기: 뜻 전체 보기 ---------- */
+.tip {
+  position: fixed; z-index: 40;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  animation: rise .14s ease-out both;
+}
+.tip .tw { font-family: var(--f-display); font-weight: 800; font-size: var(--t-lg); }
+.tip .td { font-family: var(--f-dict); font-size: var(--t-sm); color: var(--ink-soft); line-height: 1.6; margin-top: 2px; }
+.opt .d { cursor: help; }
